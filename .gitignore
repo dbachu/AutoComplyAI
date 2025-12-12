@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Environment variables
+.env
+
+# Models (optional—remove if you want them on GitHub)
+models/*.joblib
+
+# macOS
+.DS_Store
+
+# Generated output
+*.pdf
+*.pptx
+*.png
+*.zip
+reports/
+

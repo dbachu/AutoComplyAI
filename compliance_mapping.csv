@@ -1,0 +1,3 @@
+finding,standard,control_id,explanation
+Phishing credential harvest,ISO27001,A.9.2,Access control and account management (recommend MFA and credential hygiene)
+Urgent payment scam,NIST-CSF,PR.AT-1,Awareness and training controls to reduce social engineering risk

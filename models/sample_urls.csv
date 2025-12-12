@@ -1,0 +1,6 @@
+type,input,label
+url,https://example.com/login,legitimate
+url,http://192.168.0.1/secure,phishing
+url,https://secure-login-example.cn.account.verify-update.ru,phishing
+email,"Dear user, your account has been locked. Verify at http://verify-account.tk/login",phishing
+email,Meeting at 3pm. Agenda attached.,legitimate

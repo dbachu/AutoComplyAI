@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>AutoComplyAI Demo</title>
+    <link rel="stylesheet" href="/static/style.css"/>
+  </head>
+  <body>
+    <div class="container">
+      <header class="header">
+        <h1>AutoComplyAI</h1>
+        <p class="tagline">Adaptive Phishing Detection with Built-In Incident Reporting</p>
+        <div class="meta">
+          <strong>Project:</strong>
+          <pre class="project">AutoComplyAI: Adaptive Phishing Detection with
+Built-In Incident Reporting</pre>
+          <strong>Authors:</strong>
+          <pre class="project">Author: Deepika Kothamasu | 
+PES2PGE24DS012
+Project Guide: Mr. Mahesh Ramegowda</pre>
+        </div>
+      </header>
+
+      <main class="main">
+        <section class="panel">
+          <h2>Scan a URL</h2>
+          <div class="row">
+            <input id="urlInput" placeholder="https://example.com/..." />
+            <button id="scanUrlBtn" class="btn">Scan URL</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Scan Email Body</h2>
+          <textarea id="emailInput" rows="6" placeholder="Paste email body here..."></textarea>
+          <div class="row">
+            <button id="scanEmailBtn" class="btn">Scan Email</button>
+            <button id="generatePdfBtn" class="btn secondary" disabled>Generate PDF from last scan</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Results</h2>
+          <div id="results" class="results">No scan yet.</div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <small>AutoComplyAI — demo. Capstone Project.</small>
+      </footer>
+    </div>
+
+    <script>
+    let lastPayload = null;
+
+    async function postFormData(type, content) {
+      const form = new FormData();
+      form.append('type', type);
+      form.append('content', content);
+      const res = await fetch('/scan', { method: 'POST', body: form });
+      return res.json();
+    }
+
+    function renderResults(json) {
+      const el = document.getElementById('results');
+      el.innerText = JSON.stringify(json, null, 2);
+      lastPayload = json;
+      document.getElementById('generatePdfBtn').disabled = false;
+    }
+
+    document.getElementById('scanUrlBtn').addEventListener('click', async () => {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) return alert('Enter a URL');
+      document.getElementById('results').innerText = 'Scanning...';
+      const r = await postFormData('url', url);
+      renderResults(r);
+    });
+
+    document.getElementById('scanEmailBtn').addEventListener('click', async () => {
+      const body = document.getElementById('emailInput').value.trim();
+      if (!body) return alert('Paste email body');
+      document.getElementById('results').innerText = 'Scanning...';
+      const r = await postFormData('email', body);
+      renderResults(r);
+    });
+
+    document.getElementById('generatePdfBtn').addEventListener('click', async () => {
+      if (!lastPayload) return alert('No scan payload available');
+      const res = await fetch('/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(lastPayload)
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        return alert('Failed to generate PDF: ' + txt);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'AutoComplyAI_report.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    });
+    </script>
+  </body>
+</html>
