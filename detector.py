@@ -6,6 +6,20 @@ import os
 from urllib.parse import urlparse
 import pandas as pd
 
+DETECTION_MODE = os.getenv("DETECTION_MODE", "single")
+
+_ensemble_rf = None
+_ensemble_lr = None
+
+if DETECTION_MODE == "ensemble":
+    try:
+        _ensemble_rf = joblib.load(os.path.join("models", "rf_model.joblib"))
+        _ensemble_lr = joblib.load(os.path.join("models", "lr_model.joblib"))
+    except Exception:
+        _ensemble_rf = None
+        _ensemble_lr = None
+
+
 MODEL_PATH = os.path.join('models', 'url_model.joblib')
 _classifier = None
 if os.path.exists(MODEL_PATH):
@@ -51,17 +65,53 @@ def analyze_url(url: str) -> dict:
         evidence.append("Not using HTTPS")
         score += 0.05
 
-    if _classifier is not None:
-        df = pd.DataFrame([feats])
+    # --- ML / Ensemble scoring ---
+    if DETECTION_MODE == "ensemble" and _ensemble_rf and _ensemble_lr:
         try:
+            feature_vector = extract_features(url)
+
+            p1 = _ensemble_rf.predict_proba([feature_vector])[0][1]
+            p2 = _ensemble_lr.predict_proba([feature_vector])[0][1]
+            prob = round((p1 + p2) / 2, 3)
+
+            score = max(score, prob)
+            evidence.append(f"Ensemble ML probability: {prob:.3f}")
+            mode = "ensemble"
+        except Exception:
+            mode = "ensemble-failed"
+
+    elif _classifier is not None:
+        try:
+            df = pd.DataFrame([feats])
             prob = float(_classifier.predict_proba(df)[0][1])
             score = max(score, prob)
             evidence.append(f"ML model probability: {prob:.3f}")
+            mode = "single"
         except Exception:
-            pass
+            mode = "single-failed"
+    else:
+        mode = "heuristic"
+
 
     verdict = "phishing" if score >= 0.5 else "suspicious" if score >= 0.3 else "legitimate"
-    return {"type": "url", "input": url, "valid": True, "features": feats, "score": round(score, 3), "verdict": verdict, "evidence": evidence}
+
+    confidence = confidence_label(score)
+    feature_explanations = explain_features(feats)
+
+    return {
+        "type": "url",
+        "input": url,
+        "valid": True,
+        "features": feats,
+        "score": round(score, 3),
+        "verdict": verdict,
+        "confidence": confidence,
+        "mode": mode,
+        "evidence": evidence,
+        "explanations": feature_explanations
+    }
+
+
 
 def email_body_features(body: str) -> dict:
     feats = {}
@@ -94,3 +144,60 @@ def analyze_email(body: str) -> dict:
 
     verdict = "phishing" if score >= 0.6 else "suspicious" if score >= 0.3 else "legitimate"
     return {"type": "email", "input_preview": body[:500], "features": feats, "score": round(score, 3), "verdict": verdict, "evidence": evidence}
+
+# detector.py
+
+import re
+from urllib.parse import urlparse
+
+def extract_features(input_text: str):
+    """
+    Extract numerical phishing features from a URL or text.
+    Returns a list in fixed order for ML models.
+    """
+
+    text = input_text.lower()
+
+    length = len(text)
+    count_dots = text.count(".")
+    has_ip = 1 if re.search(r"\b\d{1,3}(\.\d{1,3}){3}\b", text) else 0
+    suspicious_tld = 1 if any(tld in text for tld in [".ru", ".cn", ".tk", ".ml", ".ga"]) else 0
+    num_digits = sum(c.isdigit() for c in text)
+    uses_https = 1 if text.startswith("https") else 0
+
+    return [
+        length,
+        count_dots,
+        has_ip,
+        suspicious_tld,
+        num_digits,
+        uses_https
+    ]
+
+def confidence_label(score: float) -> str:
+    if score >= 0.75:
+        return "High"
+    elif score >= 0.4:
+        return "Medium"
+    else:
+        return "Low"
+
+def explain_features(feats: dict) -> list:
+    explanations = []
+
+    if feats.get("has_ip"):
+        explanations.append("URL contains an IP address, commonly used in phishing.")
+
+    if feats.get("suspicious_tld"):
+        explanations.append("Domain uses a suspicious top-level domain.")
+
+    if feats.get("count_dots", 0) > 4:
+        explanations.append("Excessive subdomains detected.")
+
+    if not feats.get("uses_https", True):
+        explanations.append("Connection is not secured with HTTPS.")
+
+    if feats.get("num_digits", 0) > 6:
+        explanations.append("Unusually high number of digits in URL.")
+
+    return explanations
